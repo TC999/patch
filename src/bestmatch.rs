@@ -44,7 +44,7 @@ where
         return (0, yoff);
     }
 
-    fd[fmid as usize] = xoff as isize;
+    fd[0] = xoff as isize;
 
     for c in 1..=max {
         let fmin = fmid - c as isize;
@@ -52,12 +52,14 @@ where
 
         // 尝试所有对角线
         for d in (fmin..=fmax).rev().step_by(2) {
-            let k = d as usize;
+            let k = (d - fmid) as usize;
             let mut x;
-            if fd.get(k.wrapping_sub(1)).unwrap_or(&-1) < fd.get(k.wrapping_add(1)).unwrap_or(&-1) {
-                x = *fd.get(k.wrapping_add(1)).unwrap_or(&-1);
+            if k > 0 && fd.get(k - 1).unwrap_or(&-1) < fd.get(k + 1).unwrap_or(&-1) {
+                x = *fd.get(k + 1).unwrap_or(&-1);
+            } else if k > 0 {
+                x = fd.get(k - 1).unwrap_or(&-1) + 1;
             } else {
-                x = fd.get(k.wrapping_sub(1)).unwrap_or(&-1) + 1;
+                x = *fd.get(k + 1).unwrap_or(&-1);
             }
             let mut y = x - d;
             // 沿对角线尝试延长匹配
