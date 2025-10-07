@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 /// Patch diff类型
@@ -66,7 +66,7 @@ pub struct Patch {
 impl Patch {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, String> {
         let file = File::open(path).map_err(|e| format!("打开patch文件失败: {}", e))?;
-        let mut reader = BufReader::new(file);
+        let reader = BufReader::new(file);
 
         let mut hunks = Vec::new();
         let mut header = PatchHeader {
@@ -83,18 +83,25 @@ impl Patch {
 
         let mut diff_type = DiffType::NoDiff;
 
-        let mut line = String::new();
-        while reader.read_line(&mut line).unwrap_or(0) > 0 {
+        let lines: Vec<String> = reader.lines()
+            .filter_map(|l| l.ok())
+            .collect();
+        
+        let mut i = 0;
+        while i < lines.len() {
+            let line = &lines[i];
             if line.starts_with("--- ") {
-                header.old_file = Some(extract_filename(&line));
+                header.old_file = Some(extract_filename(line));
             } else if line.starts_with("+++ ") {
-                header.new_file = Some(extract_filename(&line));
+                header.new_file = Some(extract_filename(line));
             } else if line.starts_with("@@ ") {
                 diff_type = DiffType::UniDiff;
-                let hunk = parse_unified_hunk(&mut reader, &line)?;
+                let (hunk, lines_consumed) = parse_unified_hunk_from_vec(&lines, i)?;
                 hunks.push(hunk);
+                i += lines_consumed;
+                continue;
             }
-            line.clear();
+            i += 1;
         }
 
         Ok(Patch {
@@ -112,8 +119,14 @@ fn extract_filename(line: &str) -> String {
     s.split('\t').next().unwrap_or("").split_whitespace().next().unwrap_or("").to_string()
 }
 
-/// 解析unified diff的hunk块
-fn parse_unified_hunk<R: BufRead>(reader: &mut R, first_line: &str) -> Result<PatchHunk, String> {
+/// 从行向量解析unified diff的hunk块，返回(hunk, consumed_lines)
+fn parse_unified_hunk_from_vec(lines: &[String], start_idx: usize) -> Result<(PatchHunk, usize), String> {
+    if start_idx >= lines.len() {
+        return Err("Invalid hunk start index".to_string());
+    }
+    
+    let first_line = &lines[start_idx];
+    
     // 头形如: "@@ -1,5 +1,6 @@ 函数名"
     let mut orig_start = 0;
     let mut orig_count = 0;
@@ -139,26 +152,35 @@ fn parse_unified_hunk<R: BufRead>(reader: &mut R, first_line: &str) -> Result<Pa
     }
     func_name = parts.next().map(|s| s.trim().to_string());
 
-    let mut lines = Vec::new();
-    let mut buf = String::new();
-    while reader.read_line(&mut buf).unwrap_or(0) > 0 {
-        let c = buf.chars().next().unwrap_or(' ');
-        match c {
-            '+' => lines.push(HunkLine { kind: LineKind::Add, content: buf[1..].to_string() }),
-            '-' => lines.push(HunkLine { kind: LineKind::Remove, content: buf[1..].to_string() }),
-            ' ' => lines.push(HunkLine { kind: LineKind::Context, content: buf[1..].to_string() }),
-            '@' => break, // 下一个hunk块
-            _ => {} // 忽略
+    let mut hunk_lines = Vec::new();
+    let mut i = start_idx + 1;
+    
+    while i < lines.len() {
+        let line = &lines[i];
+        
+        // 如果遇到新的hunk或者文件头，停止当前hunk的解析
+        if line.starts_with("@@") || line.starts_with("---") || line.starts_with("+++") {
+            break;
         }
-        buf.clear();
+        
+        let c = line.chars().next().unwrap_or(' ');
+        match c {
+            '+' => hunk_lines.push(HunkLine { kind: LineKind::Add, content: line[1..].to_string() }),
+            '-' => hunk_lines.push(HunkLine { kind: LineKind::Remove, content: line[1..].to_string() }),
+            ' ' => hunk_lines.push(HunkLine { kind: LineKind::Context, content: line[1..].to_string() }),
+            _ => {} // 忽略其他行（如注释等）
+        }
+        i += 1;
     }
+    
+    let consumed = i - start_idx;
 
-    Ok(PatchHunk {
+    Ok((PatchHunk {
         orig_start,
         orig_count,
         new_start,
         new_count,
-        lines,
+        lines: hunk_lines,
         func: func_name,
-    })
+    }, consumed))
 }

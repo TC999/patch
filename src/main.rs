@@ -1,8 +1,5 @@
 use std::env;
 use std::process;
-//use crate::env::args;
-use std::env::args;
-
 
 mod common;
 mod inp;

@@ -29,7 +29,7 @@ where
     let fd = &mut v[offset as usize..];
 
     let mut ymax = -1isize;
-    let mut c = 0;
+    let _c = 0;
 
     // 先处理完全匹配的前缀
     let mut xoff = 0;
@@ -47,8 +47,8 @@ where
     fd[fmid as usize] = xoff as isize;
 
     for c in 1..=max {
-        let mut fmin = fmid - c as isize;
-        let mut fmax = fmid + c as isize;
+        let fmin = fmid - c as isize;
+        let fmax = fmid + c as isize;
 
         // 尝试所有对角线
         for d in (fmin..=fmax).rev().step_by(2) {
