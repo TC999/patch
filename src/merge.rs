@@ -1,4 +1,4 @@
-use crate::inp::{InputFile, ILine};
+use crate::inp::InputFile;
 use crate::pch::{Patch, PatchHunk, LineKind};
 use crate::common::OutState;
 
@@ -33,6 +33,8 @@ pub fn merge_hunk(
                         conflict = true;
                         // 这里可以收集冲突信息
                     }
+                    // 输出上下文行
+                    outstate.write_line(iline.ptr);
                 }
                 input_idx += 1;
             }
@@ -42,12 +44,13 @@ pub fn merge_hunk(
                     if iline.ptr != hunk_line.content.trim_end_matches('\n') {
                         conflict = true;
                     }
+                    // Remove 行不输出到结果文件
                 }
                 input_idx += 1;
             }
             LineKind::Add => {
                 // 直接插入新行到输出
-                // outstate.write_line(hunk_line.content.as_str()); // 假设有此方法
+                outstate.write_line(hunk_line.content.trim_end_matches('\n'));
             }
         }
         hunk_idx += 1;
@@ -67,12 +70,37 @@ pub fn merge_patch(
     outstate: &mut OutState,
 ) -> Vec<MergeResult> {
     let mut results = Vec::new();
-
+    let mut current_line = 1; // 1-based index
+    
     for hunk in &patch.hunks {
         // 这里只是简单定位，实际应调用最佳匹配算法
         let where_to_apply = hunk.orig_start;
+        
+        // 输出 hunk 之前的未修改行
+        while current_line < where_to_apply {
+            if let Some(iline) = input.ifetch(current_line) {
+                outstate.write_line(iline.ptr);
+            }
+            current_line += 1;
+        }
+        
         let res = merge_hunk(input, hunk, outstate, where_to_apply);
         results.push(res);
+        
+        // 更新当前行位置：跳过 hunk 中处理的原始行数
+        // 计算 hunk 中的原始行数（context + remove）
+        let orig_lines = hunk.lines.iter().filter(|l| {
+            l.kind == LineKind::Context || l.kind == LineKind::Remove
+        }).count();
+        current_line = where_to_apply + orig_lines;
+    }
+    
+    // 输出最后一个 hunk 之后的所有剩余行
+    while current_line <= input.num_lines() {
+        if let Some(iline) = input.ifetch(current_line) {
+            outstate.write_line(iline.ptr);
+        }
+        current_line += 1;
     }
 
     results
@@ -82,8 +110,9 @@ pub fn merge_patch(
 impl OutState {
     pub fn write_line(&mut self, line: &str) {
         use std::io::Write;
-        writeln!(self.file, "{}", line).unwrap();
+        // 直接写入内容，不添加额外的换行
+        write!(self.file, "{}\n", line).unwrap();
         self.zero_output = false;
-        self.after_newline = line.ends_with('\n');
+        self.after_newline = true;
     }
 }
