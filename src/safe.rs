@@ -1,7 +1,7 @@
 use std::fs::{self, File, OpenOptions, Metadata};
-use std::io::{self, Read};
+use std::io;
 use std::os::unix::fs::OpenOptionsExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// 是否允许不安全路径（如访问工作目录以外的文件）
 pub static mut UNSAFE: bool = false;

@@ -1,7 +1,5 @@
 use std::fs::File;
-use std::os::unix::fs::MetadataExt;
 use std::sync::atomic::{AtomicBool, AtomicI32};
-use std::sync::Arc;
 
 pub type Idx = usize;
 
