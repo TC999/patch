@@ -1,5 +1,8 @@
 use std::env;
 use std::process;
+//use crate::env::args;
+use std::env::args;
+
 
 mod common;
 mod inp;
@@ -8,6 +11,7 @@ mod util;
 mod bestmatch;
 mod merge;
 mod safe;
+mod help;
 
 fn main() {
     // 显示版本信息
@@ -16,6 +20,13 @@ fn main() {
     println!("用法: patch [选项] 原文件 补丁文件\n");
 
     let args: Vec<String> = env::args().collect();
+
+    if args.contains(&"--help".to_string()) {
+        println!("{}", help::HELP_TEXT);
+        return;
+    }
+
+    //let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
         eprintln!("参数错误，需指定原文件和补丁文件");
         process::exit(1);
